@@ -1,0 +1,119 @@
+###The same code as in the P6 counting script applies here with using the GenomicsAlignment to define your genes, introns, exons, etc.
+##So the variation comes from a simple command on the "exonCollapseddb.filtered" file - I'm showing more downstream stuff here, but that's not so important
+#if this data's actually valuable to you (wasn't for me, see desctiption) - you can make some nice plots with it to visulise abundance of individual exons!
+
+
+#this is the last step from the original analysis (see fpkm-counts-p6) file that is the same
+#filter out genes mapped to multiple places
+exondb.filtered <- GRangesList()
+for (i in 1:length(exondb.pc)) {
+  if (length(unique(as.vector(strand(exondb.pc[[i]])))) > 1) next
+  if (length(unique(as.vector(seqnames(exondb.pc[[i]])))) > 1) next
+  exondb.filtered <- c(exondb.filtered, exondb.pc[i])
+}
+
+exonCollapsedb.filtered <- GenomicRanges::reduce(exondb.filtered) # GRangeList object of genes with non-overlapping exons
+
+####**Different here for generating individual exon counts**
+unlisted_exonCollapsedf.filtered <- unlist(exonCollapsedb.filtered) #***THIS IS THE BIG DIFFERENCE! essentailly pulls out all genomic regions and tags them individually -> From manual: "Return the GAlignments object conceptually defined by c(x[[1]], x[[2]]" ~ my exons were location.2 location.3 .4 .5 .6 .7 etc.
+grlToGTF(unlisted_exonCollapsedf.filtered,"exon")
+unlist_exonCollapseTxdb <-makeTxDbFromGFF("unlisted_exonCollapsedf.filtered.gtf")
+
+###################
+
+##Here's the point that differs between different samples/conditions. The above code only need be run once (per enviornment)
+setwd("/Users/belfordak/Desktop/Jan_seq_all/bams_bais/P6")
+
+bmfls <- list.files(pattern="bam$",full.names=T)
+bmfls_list <- BamFileList(bmfls)
+EXON_geneCnt <- summarizeOverlaps(unlisted_exonCollapsedf.filtered,bmfls_list,ignore.strand=T,singleEnd=TRUE,fragments=FALSE + inter.feature=FALSE) #inter.feature new here
+samples <- colnames(EXON_geneCnt)
+condition <- c("P6_r1", "P6_r2", "P6_r3","P6_r4")
+colData(EXON_geneCnt) <- DataFrame(samples, condition, row.names = samples)
+dds <- DESeqDataSet(EXON_geneCnt, design = ~condition)
+dds <- DESeq(dds)
+
+#for counts
+library(GenomicAlignments)
+library(GenomicRanges)
+library(GenomicFeatures)
+library(Rsamtools)
+library(pbapply)
+library(DESeq2)
+library(DEFormats)
+
+#Creating count values
+#Creating exon count table
+dds_exon_datset = DESeqDataSet(EXON_geneCnt, design = ~ condition)
+dge_exon_lst = DGEList(dds_exon_datset)
+ok <- rep(c("1", "2", "3", "4"))
+colData(EXON_geneCnt)$condition = ok
+dds_exon_datset = DESeqDataSet(EXON_geneCnt, design = ~ condition)
+dge_exon_lst = as.DGEList(dds_exon_datset)
+
+head(dge_exon_lst)
+
+P6_exon_table <- as.matrix(dge_exon_lst)
+
+write.csv(P6_exon_table, file = "P6_indiv_exons_on_genes_counts.csv")
+
+#####This L1
+setwd("/Users/belfordak/Desktop/Jan_seq_all/bams_bais/L1/")
+
+bmfls <- list.files(pattern="bam$",full.names=T)
+bmfls_list <- BamFileList(bmfls)
+EXON_geneCnt <- summarizeOverlaps(unlisted_exonCollapsedf.filtered,bmfls_list,ignore.strand=T,singleEnd=TRUE,fragments=FALSE, inter.feature=FALSE) 
+samples <- colnames(EXON_geneCnt)
+condition <- c("L1_r1", "L1_r2", "L1_r3","L1_r4")
+colData(EXON_geneCnt) <- DataFrame(samples, condition, row.names = samples)
+dds <- DESeqDataSet(EXON_geneCnt, design = ~condition)
+dds <- DESeq(dds)
+
+fpkm.all <- fpkm(dds)
+exon.names <- grep("Intron_", row.names(fpkm.all), invert = T)
+fpkm.exon <- fpkm.all[exon.names,]
+
+names(fpkm.exon) <- c("Gene", "L1_r1_exon_fpkm","L1_r2_exon_fpkm", "L1_r3_exon_fpkm", "L1_r4_exon_fpkm")
+
+write.csv(fpkm.exon, file = "L1_indiv_exons_on_genes_fpkm.csv")
+
+#for counts
+library(GenomicAlignments)
+library(GenomicRanges)
+library(GenomicFeatures)
+library(Rsamtools)
+library(pbapply)
+library(DESeq2)
+library(DEFormats)
+
+#Creating count values
+#Creating exon count table
+dds_exon_datset = DESeqDataSet(EXON_geneCnt, design = ~ condition)
+dge_exon_lst = DGEList(dds_exon_datset)
+ok <- rep(c("1", "2", "3", "4"))
+colData(EXON_geneCnt)$condition = ok
+dds_exon_datset = DESeqDataSet(EXON_geneCnt, design = ~ condition)
+dge_exon_lst = as.DGEList(dds_exon_datset)
+
+head(dge_exon_lst)
+L1_exon_table <- as.matrix(dge_exon_lst)
+write.csv(L1_exon_table, file = "L1_indiv_exons_on_genes_counts.csv")
+
+#for Th1 cell 72hr
+setwd("/Users/belfordak/Desktop/L1:P6:P13_documents/Tcells_bams/")
+bmfls <- list.files(pattern="STAR_ttTh1_72h_*",full.names=T)
+bmfls_list <- BamFileList(bmfls)
+EXON_geneCnt <- summarizeOverlaps(unlisted_exonCollapsedf.filtered,bmfls_list,ignore.strand=T,singleEnd=TRUE,fragments=FALSE,inter.feature=FALSE)
+samples <- colnames(EXON_geneCnt)
+condition <- c("72h_r1", "72h_r2")
+colData(EXON_geneCnt) <- DataFrame(samples, condition, row.names = samples)
+dds <- DESeqDataSet(EXON_geneCnt, design = ~condition)
+dds <- DESeq(dds)
+
+fpkm.all <- fpkm(dds)
+exon.names <- grep("Intron_", row.names(fpkm.all), invert = T)
+fpkm.exon <- fpkm.all[exon.names,]
+
+names(fpkm.exon) <- c("Gene", "72hr_r1_exon_fpkm","72hr_r2_exon_fpkm")
+
+write.csv(fpkm.exon, file = "/Users/belfordak/Desktop/Jan_seq_all/bams_bais/L1/Tcell_indiv_exons_on_genes_fpkm.csv")
